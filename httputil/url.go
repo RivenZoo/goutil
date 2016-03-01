@@ -15,5 +15,6 @@ func JoinQueryParam(uri string, param url.Values) (u *url.URL, err error) {
 			}
 		}
 	}
+	u.RawQuery = dstQuery.Encode()
 	return
 }
