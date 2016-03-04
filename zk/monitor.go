@@ -91,6 +91,7 @@ type monitorServCli struct {
 	addr         string
 	enableCount  int
 	disableCount int
+	allocCount   int32
 }
 
 func (c *monitorServCli) setValid(valid bool) {
@@ -124,6 +125,11 @@ func (c *monitorServCli) enable() {
 	c.enableCount++
 }
 
+func (c *monitorServCli) allocConn() ServiceConn {
+	atomic.AddInt32(&c.allocCount, 1)
+	return c.cli.GetConn()
+}
+
 func (c *monitorServCli) close() {
 	c.setValid(false)
 	c.cli.Close()
@@ -132,9 +138,10 @@ func (c *monitorServCli) close() {
 func (c *monitorServCli) String() string {
 	w := bytes.NewBuffer(make([]byte, 0))
 	valid := c.isValid()
+	allocCnt := atomic.LoadInt32(&c.allocCount)
 
-	fmt.Fprintf(w, "{\"valid\":%t,\"addr\":\"%s\",\"enableCnt\":%d,\"disableCnt\":%d",
-		valid, c.addr, c.enableCount, c.disableCount)
+	fmt.Fprintf(w, "{\"valid\":%t,\"addr\":\"%s\",\"enableCnt\":%d,\"disableCnt\":%d,\"allocCnt\":%d",
+		valid, c.addr, c.enableCount, c.disableCount, allocCnt)
 	if valid {
 		fmt.Fprintf(w, ",\"cli\":\"%s\"}", c.cli.Status())
 	} else {
@@ -146,8 +153,8 @@ func (c *monitorServCli) String() string {
 type ZKMonitor struct {
 	servIdx          map[string]int
 	servCli          []monitorServCli // this array never shrink, set monitorServCli invalid to skip this element
+	servCliInUse     atomic.Value     // store []monitorServCli, copy from servCli
 	servLock         *sync.RWMutex
-	availAddr        int32
 	addrMonitor      AddrMonitor
 	serv             Service
 	servArg          interface{}
@@ -158,14 +165,17 @@ func NewZKMonitor(zkServers []string, timeout time.Duration, serv Service, servA
 	monitorPath string) *ZKMonitor {
 	zkCli := NewZKClient(zkServers, timeout, nil)
 	addrM := newAddrMonitor(zkCli, monitorPath)
-	return &ZKMonitor{
-		servIdx:     make(map[string]int),
-		servCli:     make([]monitorServCli, 0),
-		servLock:    &sync.RWMutex{},
-		addrMonitor: addrM,
-		serv:        serv,
-		servArg:     servArg,
+	zkm := &ZKMonitor{
+		servIdx:      make(map[string]int),
+		servCli:      make([]monitorServCli, 0),
+		servCliInUse: atomic.Value{},
+		servLock:     &sync.RWMutex{},
+		addrMonitor:  addrM,
+		serv:         serv,
+		servArg:      servArg,
 	}
+	zkm.servCliInUse.Store(make([]monitorServCli, 0))
+	return zkm
 }
 
 func (zkm *ZKMonitor) Run() {
@@ -198,15 +208,17 @@ func (zkm *ZKMonitor) Close() {
 }
 
 // enable/disable service cli, add new service cli
-func (zkm *ZKMonitor) updateServCli(addrs []string) {
+func (zkm *ZKMonitor) onAddrChange(addrs []string) {
 	addrMark := make(map[string]bool)
 	var added []string
 
+	clients := make([]monitorServCli, 0, len(addrs))
 	for _, addr := range addrs {
 		if idx, ok := zkm.servIdx[addr]; !ok {
 			added = append(added, addr)
 		} else {
 			zkm.servCli[idx].enable()
+			clients = append(clients, zkm.servCli[idx])
 		}
 		addrMark[addr] = true
 	}
@@ -220,54 +232,27 @@ func (zkm *ZKMonitor) updateServCli(addrs []string) {
 		for _, addr := range added {
 			cli := zkm.serv.InitCli(addr, zkm.servArg)
 
-			zkm.servLock.Lock()
-			zkm.servCli = append(zkm.servCli, monitorServCli{
+			servCli := monitorServCli{
 				cli:   cli,
 				valid: validMark,
 				addr:  addr,
-			})
+			}
+			zkm.servLock.Lock()
+			zkm.servCli = append(zkm.servCli, servCli)
 			zkm.servLock.Unlock()
+
+			clients = append(clients, servCli)
 
 			zkm.servIdx[addr] = n
 			n++
 		}
 	}
+	zkm.servCliInUse.Store(clients)
 }
 
-// adjust valid cli to avoid valid cli node not even
-func (zkm *ZKMonitor) adjustServCli() {
-	sz := len(zkm.servCli)
-	if sz < 2 {
-		return
-	}
-	head, tail := 0, sz-1
-	for head < tail {
-		if zkm.servCli[head].isValid() {
-			head++
-			continue
-		}
-		if !zkm.servCli[tail].isValid() {
-			tail--
-			continue
-		}
-		// head point to invalid cli and tail point to valid cli
-		// swap head and tail
-		headAddr, tailAddr := zkm.servCli[head].addr, zkm.servCli[tail].addr
-		zkm.servLock.Lock()
-		zkm.servCli[head], zkm.servCli[tail] = zkm.servCli[tail], zkm.servCli[head]
-		zkm.servLock.Unlock()
-		zkm.servIdx[headAddr], zkm.servIdx[tailAddr] = tail, head
-		head++
-		tail--
-	}
-}
-
-func (zkm *ZKMonitor) onAddrChange(addrs []string) {
-	availAddr := int32(len(addrs))
-	zkm.updateServCli(addrs)
-	zkm.adjustServCli()
-	// update after adjust
-	atomic.StoreInt32(&zkm.availAddr, availAddr)
+func (zkm *ZKMonitor) validServClients() []monitorServCli {
+	cli := zkm.servCliInUse.Load()
+	return cli.([]monitorServCli)
 }
 
 func findFirstValid(servCli []monitorServCli, start int) (bool, int) {
@@ -298,14 +283,15 @@ func (zkm *ZKMonitor) RoundTripGetter() *RoundTripGetter {
 }
 
 type RoundTripGetter struct {
-	zkm *ZKMonitor
+	zkm     *ZKMonitor
 	nextUse uint32
 }
 
 // find first valid cli and GetConn by roundtrip
 func (rtg *RoundTripGetter) GetConn() ServiceConn {
 	zkm := rtg.zkm
-	availAddr := atomic.LoadInt32(&zkm.availAddr)
+	servCli := zkm.validServClients()
+	availAddr := len(servCli)
 	if availAddr == 0 {
 		return nil
 	}
@@ -313,12 +299,9 @@ func (rtg *RoundTripGetter) GetConn() ServiceConn {
 	n := atomic.AddUint32(&rtg.nextUse, uint32(1))
 	cur := n % uint32(availAddr)
 
-	zkm.servLock.RLock()
-	defer zkm.servLock.RUnlock()
-	ok, idx := findFirstValid(zkm.servCli, int(cur))
+	ok, idx := findFirstValid(servCli, int(cur))
 	if ok {
-		conn := zkm.servCli[idx].cli.GetConn()
-		return conn
+		return servCli[idx].allocConn()
 	}
 	return nil
 }
@@ -346,12 +329,14 @@ type HashGetter struct {
 // find first valid cli and GetConn by hash
 func (hg *HashGetter) GetConn(key []byte) ServiceConn {
 	hashVal := hg.hashFn(key)
-
 	zkm := hg.zkm
-	zkm.servLock.RLock()
-	defer zkm.servLock.RUnlock()
 
-	availAddr := atomic.LoadInt32(&zkm.availAddr)
+	servCli := zkm.validServClients()
+	availAddr := int32(len(servCli))
+	if availAddr == 0 {
+		return nil
+	}
+
 	cur := int32(0)
 	if availAddr > 1 {
 		cur = int32(hashVal) % availAddr
@@ -360,21 +345,20 @@ func (hg *HashGetter) GetConn(key []byte) ServiceConn {
 		}
 	}
 
-	ok, idx := findFirstValid(zkm.servCli, int(cur))
+	ok, idx := findFirstValid(servCli, int(cur))
 	if ok {
-		return zkm.servCli[idx].cli.GetConn()
+		return servCli[idx].allocConn()
 	}
 	return nil
 }
 
 func (zkm *ZKMonitor) Status() string {
-	zkm.servLock.RLock()
-	defer zkm.servLock.RUnlock()
+	servCli := zkm.validServClients()
 
-	s := make([]string, 0, len(zkm.servCli))
-	for _, cli := range zkm.servCli {
+	s := make([]string, 0, len(servCli))
+	for _, cli := range servCli {
 		s = append(s, fmt.Sprintf("    %s", &cli))
 	}
-	return fmt.Sprintf("{\n  \"availAddr\":%d,\n  \"addrChangeCnt\":%d,\n  \"service\":[\n%s\n  ]\n}\n",
-		zkm.availAddr, zkm.addrChangedCount, strings.Join(s, ",\n"))
+	return fmt.Sprintf("{\n  \"addrChangeCnt\":%d,\n  \"service\":[\n%s\n  ]\n}\n",
+		zkm.addrChangedCount, strings.Join(s, ",\n"))
 }

@@ -60,13 +60,13 @@ func TestUpdateCli(t *testing.T) {
 		servArg:     nil,
 	}
 	addrs := []string{"addr1", "addr2", "addr3"}
-	zkm.updateServCli(addrs)
+	zkm.onAddrChange(addrs)
 	t.Log(zkm.Status())
 	checkAddrs(addrs, zkm, t)
 
 	deleted := addrs[len(addrs)-1]
 	addrs = addrs[0 : len(addrs)-1]
-	zkm.updateServCli(addrs)
+	zkm.onAddrChange(addrs)
 	t.Log(zkm.Status())
 	checkAddrs(addrs, zkm, t)
 
@@ -78,9 +78,9 @@ func TestUpdateCli(t *testing.T) {
 		t.FailNow()
 	}
 
-	zkm.updateServCli(nil)
+	zkm.onAddrChange(nil)
 	t.Log(zkm.Status())
-	zkm.updateServCli(addrs)
+	zkm.onAddrChange(addrs)
 	t.Log(zkm.Status())
 }
 
@@ -94,13 +94,12 @@ func TestAdjustCli(t *testing.T) {
 		servArg:     nil,
 	}
 	addrs := []string{"addr1", "addr2", "addr3", "addr4", "addr5", "addr8"}
-	zkm.updateServCli(addrs)
+	zkm.onAddrChange(addrs)
 	newAddrs := make([]string, 0)
 	newAddrs = append(newAddrs, addrs[0], addrs[2], addrs[5])
-	zkm.updateServCli(newAddrs)
+	zkm.onAddrChange(newAddrs)
 	t.Log(zkm.Status())
 
-	zkm.adjustServCli()
 	t.Log(zkm.Status())
 	checkAddrs(newAddrs, zkm, t)
 }
