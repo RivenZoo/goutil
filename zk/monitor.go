@@ -15,29 +15,12 @@ import (
 	log "github.com/alecthomas/log4go"
 )
 
-// use zk to monitor service address
+// used to monitor service address
 // for example, redis regist in path like /redis with ephemeral node named addr:port
 // eg. /redis/10.0.0.1:6379 /redis/10.0.0.2:6379
 // watch dir /redis and update redis instance addr with sub node
 
-type ServiceConn interface{}
-
-type ServiceCli interface {
-	GetConn() ServiceConn
-	Status() string
-	Close()
-	OnDisable()
-	OnEnable()
-}
-
-// watch zk service address dir
-// when got new address event call InitCli
-// when got address deleted event call ServiceCli.OnDisable and set cli invalid, will skip the cli on GetConn
-// when got address recovery event call ServiceCli.OnRecover and set cli valid
-type Service interface {
-	InitCli(addr string, arg interface{}) ServiceCli
-}
-
+// monitor interface to watch service address dir
 type AddrMonitor interface {
 	ValidAddr() (<-chan []string, error)
 	Close()
