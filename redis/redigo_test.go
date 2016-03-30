@@ -14,7 +14,7 @@ var (
 )
 
 func TestRedisGetConn(t *testing.T) {
-	redisAddr := "10.20.231.32:6379"
+	redisAddr := "127.0.0.1:6379"
 	cli := zk.NewZKClient(testServers, time.Second*5, nil)
 	mpath := "/test"
 	rds := NewZKRedisCli(testServers, mpath, &RedisDbConf{Timeout:time.Second*5})

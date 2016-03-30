@@ -25,7 +25,7 @@ func testRsaEncrypt() *RsaEncrypt {
 }
 
 func TestRsaAndBase64(t *testing.T) {
-	plainText := []byte(`{"hostver":"100001","tryno":"1334","plugin":{"id":1,"md5":"f5148ac391c2bfbcc6dd6a5bb754612c"}}`)
+	plainText := []byte(`{"num":"100001","tunnel":"13034","data":{"id":1,"md5":"f5148ac391c2bfbcc6dd6a5bb754612c"}}`)
 	rsaEncrypt := testRsaEncrypt()
 	encrypted, err := rsaEncrypt.EncryptOAEP(plainText, nil)
 	if err != nil {
