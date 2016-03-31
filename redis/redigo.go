@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/freecoder-zrw/goutil/zk"
+	"github.com/RivenZoo/goutil/zk"
 
 	"github.com/garyburd/redigo/redis"
 )

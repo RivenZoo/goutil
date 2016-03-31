@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/freecoder-zrw/goutil/debug"
+	"github.com/RivenZoo/goutil/debug"
 
 	log "github.com/cihub/seelog"
 )
