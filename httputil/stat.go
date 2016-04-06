@@ -24,7 +24,8 @@ func (c *counter) reset() {
 }
 
 func (c *counter) String() string {
-	return fmt.Sprintf("{start-time:%s, count:%d}", c.startTime, c.n)
+	return fmt.Sprintf("{\"start_time\":\"%s\", \"count\":%d}",
+		c.startTime.Format("2006-01-02/15:04:05"), c.n)
 }
 
 type StatStub struct {
@@ -39,11 +40,17 @@ func NewStatStub() *StatStub {
 	return ss
 }
 
-func (ss *StatStub) RegistStat(key string) {
+func (ss *StatStub) regist(key string) {
 	if _, ok := ss.stub[key]; ok {
 		return
 	}
 	ss.stub[key] = &counter{0, time.Now()}
+}
+
+func (ss *StatStub) RegistStat(keys ...string) {
+	for _, key := range keys {
+		ss.regist(key)
+	}
 }
 
 func (ss *StatStub) IncrCounter(key string) {
@@ -55,9 +62,9 @@ func (ss *StatStub) IncrCounter(key string) {
 func (ss *StatStub) Status() string {
 	var s []string
 	for k, c := range ss.stub {
-		s = append(s, fmt.Sprintf("%s:%s", k, c))
+		s = append(s, fmt.Sprintf("{\"%s\":%s}", k, c))
 	}
-	return strings.Join(s, "\n")
+	return fmt.Sprintf("[%s]", strings.Join(s, ",\n"))
 }
 
 func (ss *StatStub) resetStatStub() {

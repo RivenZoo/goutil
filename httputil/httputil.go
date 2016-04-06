@@ -62,9 +62,7 @@ func HttpHandler(fn http.HandlerFunc) http.Handler {
 }
 
 func RegisterUrlStat(urlPath ...string) {
-	for _, pth := range urlPath {
-		statStub.RegistStat(pth)
-	}
+	statStub.RegistStat(urlPath...)
 }
 
 func UrlStatResult() string {
