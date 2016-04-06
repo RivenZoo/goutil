@@ -14,9 +14,13 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"github.com/RivenZoo/goutil/timeutil"
 )
 
-var statStub = NewStatStub()
+var (
+	statStub = NewStatStub()
+	timeStub = timeutil.NewTimeStat()
+)
 
 type HandlerMap map[string]http.Handler
 
@@ -54,19 +58,24 @@ func HttpHandler(fn http.HandlerFunc) http.Handler {
 				log.Errorf("INNER-PANIC: serving:%s %v\n%s", r.RemoteAddr, e, strings.Join(s, "\n"))
 			}
 		}()
+		urlPath := r.URL.Path
 		// stat url path query count
-		statStub.IncrCounter(r.URL.Path)
+		statStub.IncrCounter(urlPath)
+		start := time.Now()
 		fn(w, r)
+		timeStub.Record(urlPath, time.Since(start))
 	}
 	return http.HandlerFunc(handleFunc)
 }
 
-func RegisterUrlStat(urlPath ...string) {
-	statStub.RegistStat(urlPath...)
+func RegisterUrlStat(urlPaths ...string) {
+	statStub.RegistStat(urlPaths...)
+	timeStub.RegistStat(urlPaths...)
 }
 
 func UrlStatResult() string {
-	return statStub.Status()
+	return fmt.Sprintf("{\"access_stat\":%s,\n\"time_stat\":%s}",
+		statStub.Status(), timeStub.Status())
 }
 
 type BaseReqHandler struct {

@@ -64,7 +64,7 @@ func (ss *StatStub) Status() string {
 	for k, c := range ss.stub {
 		s = append(s, fmt.Sprintf("{\"%s\":%s}", k, c))
 	}
-	return fmt.Sprintf("[%s]", strings.Join(s, ",\n"))
+	return fmt.Sprintf("[\n\t%s\n]", strings.Join(s, ",\n\t"))
 }
 
 func (ss *StatStub) resetStatStub() {
