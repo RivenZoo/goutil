@@ -6,6 +6,7 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"time"
+	"bytes"
 )
 
 var (
@@ -50,4 +51,50 @@ func CFBDecrypt(aesKey, iv, buf []byte) error {
 	stream := cipher.NewCFBDecrypter(block, iv)
 	stream.XORKeyStream(buf, buf)
 	return nil
+}
+
+func PKCS5Padding(ciphertext []byte, blockSize int) []byte {
+	padding := blockSize - len(ciphertext)%blockSize
+	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
+	return append(ciphertext, padtext...)
+}
+
+func PKCS5UnPadding(origData []byte) []byte {
+	length := len(origData)
+	unpadding := int(origData[length-1])
+	return origData[:(length - unpadding)]
+}
+
+func ECBEncrypt(aesKey, buf []byte) ([]byte, error) {
+	block, err := aes.NewCipher([]byte(aesKey))
+	if err != nil {
+		return nil, err
+	}
+	bs := block.BlockSize()
+	plaintext := PKCS5Padding(buf, bs)
+	ciphertext := make([]byte, len(plaintext))
+	buf = ciphertext
+	for len(plaintext) > 0 {
+		block.Encrypt(ciphertext, plaintext)
+		plaintext = plaintext[bs:]
+		ciphertext = ciphertext[bs:]
+	}
+	return buf, nil
+}
+
+func ECBDecrypt(aesKey, data []byte) ([]byte, error) {
+	block, err := aes.NewCipher([]byte(aesKey))
+	if err != nil {
+		return nil, err
+	}
+	bs := block.BlockSize()
+	plaintext := make([]byte, len(data))
+	buf := plaintext
+	for len(data) > 0 {
+		block.Decrypt(plaintext, data)
+		plaintext = plaintext[bs:]
+		data = data[bs:]
+	}
+	buf = PKCS5UnPadding(buf)
+	return buf, nil
 }

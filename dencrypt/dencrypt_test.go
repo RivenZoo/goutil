@@ -3,6 +3,7 @@ package dencrypt
 import (
 	"bytes"
 	"testing"
+	"encoding/base64"
 )
 
 func TestCFBEncrypt(t *testing.T) {
@@ -28,5 +29,30 @@ func BenchmarkGenRandKey(b *testing.B) {
 func BenchmarkGenTimeKey(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		GenTimeKey()
+	}
+}
+
+func TestAESECB(t *testing.T) {
+	data := "abbbbbbbbbbbbbbbccbbb"
+	key := "1111111111111111"
+	expect := "MKkg0sg2vrFLcreSGyJ7nVPXRpt3TGoWFPl+ykXruO8="
+	buf, err := ECBEncrypt([]byte(key), []byte(data))
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+	ret := base64.StdEncoding.EncodeToString(buf)
+	if ret != expect {
+		t.Log(ret)
+		t.FailNow()
+	}
+	plain, err := ECBDecrypt([]byte(key), buf)
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+	if string(plain) != data {
+		t.Log(string(plain))
+		t.FailNow()
 	}
 }
