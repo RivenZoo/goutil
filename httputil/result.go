@@ -2,6 +2,7 @@ package httputil
 import (
 	"net/http"
 	"fmt"
+	"encoding/json"
 )
 
 type HandleResult struct {
