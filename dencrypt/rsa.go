@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
@@ -15,6 +16,7 @@ import (
 
 var (
 	NewMd5Hash    = func() hash.Hash { return md5.New() }
+	NewSha1Hash   = func() hash.Hash { return sha1.New() }
 	NewSha256Hash = func() hash.Hash { return sha256.New() }
 )
 
