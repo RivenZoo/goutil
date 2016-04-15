@@ -27,6 +27,22 @@ func testRsaEncrypt(newHash func() hash.Hash) *RsaEncrypt {
 	return rsaEncrypt
 }
 
+func testRsaPKCSEncrypt() *RsaPKCSEncrypt {
+	var key *rsa.PrivateKey
+	var err error
+
+	keyBytes := 256
+	if key, err = rsa.GenerateKey(rand.Reader, keyBytes*8); err != nil {
+		return nil
+	}
+	rsaEncrypt := &RsaPKCSEncrypt{
+		privateKey:  key,
+		keyBytes:    keyBytes,
+		maxMsgBytes: keyBytes - 11,
+	}
+	return rsaEncrypt
+}
+
 func TestRsaAndBase64(t *testing.T) {
 	plainText := []byte(`{"num":"100001","tunnel":"13034","data":{"id":1,"md5":"f5148ac391c2bfbcc6dd6a5bb754612c"}}`)
 	rsaEncrypt := testRsaEncrypt(NewSha256Hash)
@@ -37,6 +53,7 @@ func TestRsaAndBase64(t *testing.T) {
 	s := base64.StdEncoding.EncodeToString(encrypted)
 	t.Log(s)
 }
+
 func TestRsaEnDecrypt(t *testing.T) {
 	plainText := make([]byte, 1024)
 	rand.Read(plainText)
@@ -47,6 +64,25 @@ func TestRsaEnDecrypt(t *testing.T) {
 	}
 	t.Log(encrypted, len(encrypted))
 	decrypted, err := rsaEncrypt.DecryptOAEP(encrypted, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(decrypted)
+	if !bytes.Equal(decrypted, plainText) {
+		t.Fail()
+	}
+}
+
+func TestRsaPKCSEnDecrypt(t *testing.T) {
+	plainText := make([]byte, 1024)
+	rand.Read(plainText)
+	rsaEncrypt := testRsaPKCSEncrypt()
+	encrypted, err := rsaEncrypt.EncryptPKCS1v15(plainText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(encrypted, len(encrypted))
+	decrypted, err := rsaEncrypt.DecryptPKCS1v15(encrypted)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +177,38 @@ func BenchmarkRsaMd5DecryptParallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			_, err := rsaEncrypt.DecryptOAEP(encrypted, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func BenchmarkRsaPKCSEncryptParallel(b *testing.B) {
+	plainText := make([]byte, 1024)
+	rand.Read(plainText)
+	rsaEncrypt := testRsaPKCSEncrypt()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, err := rsaEncrypt.EncryptPKCS1v15(plainText)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func BenchmarkRsaPKCSDecryptParallel(b *testing.B) {
+	plainText := make([]byte, 1024)
+	rand.Read(plainText)
+	rsaEncrypt := testRsaPKCSEncrypt()
+	encrypted, err := rsaEncrypt.EncryptPKCS1v15(plainText)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, err := rsaEncrypt.DecryptPKCS1v15(encrypted)
 			if err != nil {
 				b.Fatal(err)
 			}
