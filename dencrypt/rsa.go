@@ -4,24 +4,28 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"hash"
 	"io"
 	"io/ioutil"
 )
 
 var (
-	defaultHashBytes = 16
+	NewMd5Hash    = func() hash.Hash { return md5.New() }
+	NewSha256Hash = func() hash.Hash { return sha256.New() }
 )
 
 type RsaEncrypt struct {
 	privateKey  *rsa.PrivateKey
 	keyBytes    int // for 1024 bits private key it's 128 bytes, used to split and encrypt log message
 	maxMsgBytes int
+	newHash     func() hash.Hash
 }
 
-func NewRsaEncrypt(privateKeyInput io.Reader, keyBytes int) (*RsaEncrypt, error) {
+func NewRsaEncrypt(privateKeyInput io.Reader, keyBytes int, newHash func() hash.Hash) (*RsaEncrypt, error) {
 	data, err := ioutil.ReadAll(privateKeyInput)
 	if err != nil {
 		return nil, err
@@ -41,16 +45,17 @@ func NewRsaEncrypt(privateKeyInput io.Reader, keyBytes int) (*RsaEncrypt, error)
 	if err = privateKey.Validate(); err != nil {
 		return nil, err
 	}
+	h := newHash()
 	r := &RsaEncrypt{
 		privateKey:  privateKey,
 		keyBytes:    keyBytes,
-		maxMsgBytes: keyBytes - (defaultHashBytes*2 + 2),
+		maxMsgBytes: keyBytes - (h.Size()*2 + 2),
+		newHash:     newHash,
 	}
 	return r, nil
 }
 
 func (r *RsaEncrypt) EncryptOAEP(plainText, label []byte) (encrypted []byte, err error) {
-	md5Hash := md5.New()
 	var buf []byte
 	publicKey := &r.privateKey.PublicKey
 
@@ -63,7 +68,7 @@ func (r *RsaEncrypt) EncryptOAEP(plainText, label []byte) (encrypted []byte, err
 			n = left
 		}
 
-		if buf, err = rsa.EncryptOAEP(md5Hash, rand.Reader, publicKey, plainText[start:start+n], label); err != nil {
+		if buf, err = rsa.EncryptOAEP(r.newHash(), rand.Reader, publicKey, plainText[start:start+n], label); err != nil {
 			return nil, err
 		}
 		encrypted = append(encrypted, buf...)
@@ -73,7 +78,6 @@ func (r *RsaEncrypt) EncryptOAEP(plainText, label []byte) (encrypted []byte, err
 }
 
 func (r *RsaEncrypt) DecryptOAEP(encrypted, label []byte) (decrypted []byte, err error) {
-	md5Hash := md5.New()
 	var buf []byte
 	sz := len(encrypted)
 	start := 0
@@ -84,7 +88,7 @@ func (r *RsaEncrypt) DecryptOAEP(encrypted, label []byte) (decrypted []byte, err
 			n = left
 		}
 
-		if buf, err = rsa.DecryptOAEP(md5Hash, rand.Reader, r.privateKey, encrypted[start:start+n], label); err != nil {
+		if buf, err = rsa.DecryptOAEP(r.newHash(), rand.Reader, r.privateKey, encrypted[start:start+n], label); err != nil {
 			return nil, err
 		}
 		decrypted = append(decrypted, buf...)
