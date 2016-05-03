@@ -34,6 +34,9 @@ type ZKClient struct {
 
 func NewZKClient(addrs []string, sessionTimeout time.Duration,
 	dialer func(network, address string, timeout time.Duration) (net.Conn, error)) *ZKClient {
+	if dialer == nil {
+		dialer = net.DialTimeout
+	}
 	cli := &ZKClient{
 		Servers:        addrs,
 		SessionTimeout: sessionTimeout,
