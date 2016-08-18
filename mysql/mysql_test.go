@@ -1,4 +1,5 @@
-package model
+package mysql
+
 import "testing"
 
 var myConf = &MysqlConf{

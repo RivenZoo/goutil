@@ -1,9 +1,10 @@
-package model
+package mysql
 
 import "database/sql"
 import (
-	_mysql "github.com/go-sql-driver/mysql"
 	"fmt"
+
+	_mysql "github.com/go-sql-driver/mysql"
 )
 
 type Logger interface {
@@ -16,7 +17,7 @@ func SetMysqlLogger(logger Logger) error {
 
 type MysqlConf struct {
 	User, Password, Addr, DbName string
-	Timeout int // seconds
+	Timeout                      int // seconds
 }
 
 func (c MysqlConf) dataSource() string {
