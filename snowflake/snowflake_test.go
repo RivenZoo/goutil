@@ -36,7 +36,8 @@ func BenchmarkIDGenerator_NextID(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			g.NextID()
+			id := g.NextID()
+			id += 1
 		}
 	})
 }
