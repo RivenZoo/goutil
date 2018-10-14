@@ -16,6 +16,7 @@ func NewIdWorker(machine, datacenter, epoch int64) *IdWorker {
 	return &IdWorker{machine & 0x1F, datacenter & 0x1F, epoch, 0, -1}
 }
 
+// caution: this function is not concurrency safety.
 func (this *IdWorker) Generate() (value int64) {
 	timeGen := func() int64 {
 		return time.Now().UnixNano() / int64(time.Millisecond)
