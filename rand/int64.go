@@ -1,6 +1,8 @@
 package rand
 
 import (
+	crand "crypto/rand"
+	"encoding/binary"
 	"math/rand"
 	"sync"
 	"time"
@@ -35,11 +37,25 @@ func NewInt64Generator(opt Int64GeneratorOption) *Int64Generator {
 	return g
 }
 
+func seed() int64 {
+	b := make([]byte, 8)
+	now := time.Now().UnixNano()
+	begin := time.Date(2015, 2, 13, 5, 41, 17, 7, time.Local).UnixNano()
+	t := uint64(now - begin)
+
+	t &= 0x00007fffffffffff
+	t <<= 16
+
+	binary.LittleEndian.PutUint64(b, t)
+	crand.Read(b[0:2])
+	return int64(binary.LittleEndian.Uint64(b))
+}
+
 func runGenerator(g *Int64Generator) {
 	g.wg.Add(1)
 	defer g.wg.Done()
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := rand.New(rand.NewSource(seed()))
 	for {
 		v := r.Int63()
 		select {
